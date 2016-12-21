@@ -1,0 +1,183 @@
+#  -*- indent-tabs-mode: nil -*-
+#
+#
+# create an AWS ELB + squid proxy tier
+#
+VERSION(1.8.1)
+#
+INCLUDE(cf4/sncr-cidrs.m4)
+#
+
+{
+  TEMPLATE(`Chef Proxy via Squid ASG'),
+
+  "Parameters" : {
+    paramString(ProxyElbCNAME,`DNS CNAME for the Chef Proxy ELB',`chef-proxy'),
+    paramPort(ChefProxyPort,`',3128),
+    paramPort(ChefHttpsPort,`',443),
+
+
+    paramAmi(InstanceAMI,`'),
+    paramInstanceType(ProxyInstanceType, `EC2 Instance Type', "m1.medium"),
+    paramDiskSize(RootDiskSize,`',`12'),
+    paramInteger(MaxProvisionTime,`Provision wait time (s)', "1500", "120", "3600"),
+
+    paramInteger(ProxyMinAS, `minimum number of proxy nodes',"1"),
+    paramInteger(ProxyMaxAS, `maximum number of proxy nodes',"1"),
+    paramInteger(ProxyScaleUpCount,`scale up count', "1", "1", "4"),
+    paramInteger(ProxyScaleDownCount,`scale up count', "-1", "-4", "-1"),
+
+    paramString(NodeName, `', `chefproxy'),
+    paramString(NodeIndex, `', `00'),
+
+    paramString(ChefRoles, `',`base,chef-proxy'),
+    paramString(ChefEnv, `'),
+
+    paramSecurityGroup(InternalAccessSG,`'),
+    paramSecurityGroup(ExternalAccessSG,`'),
+
+    paramString(ChefOrg, `'),
+    paramString(ChefServerURL, `'),
+    paramString(ChefProxyURL, `'),
+
+    paramString(AppInstanceProfile, `'),
+    paramKey(KeyPair,`',`no-key'),
+    paramS3Bucket(PublicBucketName, `'),
+    paramS3Bucket(PrivateBucketName, `'),
+    paramString(OpsAlertsTopic, `'),
+
+    paramVpc(VpcId, `VPC ID'),
+    paramCidrBlock(VpcCidr, `'),
+    paramAZ(AZ1, `'),
+    paramAZ(AZ2, `'),
+    paramSubnet(Subnet1, `'),
+    paramSubnet(Subnet2, `'),
+
+    paramBootPriority(1),
+    paramPurpose(infrastructure),
+    paramString(ExtraHelper, `Additional Bootstrap Helper'. 'none'),
+
+    paramDomain(Domain,`app domain', `devops.dev.cloud.synchronoss.net'),
+    paramString(Project, `project',`NOPROJECT'),
+    paramString(Environment, `environment',`NOENVIRONMENT')
+  },
+
+  "Mappings" : {
+    INCLUDE(cf4/BandwidthPerInstanceType.map)
+  },
+
+
+  "Resources" : {
+
+    mkVpcSecurityGroup(ChefProxyElbSG, &VpcId, `chef proxy elb security group'),
+      addSecurityGroupRule(ChefProxyElbSG, proxyportin, in, "tcp",
+                           &ChefProxyPort, "allCIDR"),
+      addSecurityGroupRule(ChefProxyElbSG, proxyportout, out, "tcp",
+                           &ChefProxyPort, "allCIDR"),
+# add the zabbix prot in here for now
+      addSecurityGroupRule(ChefProxyElbSG, zabbixin, in, "tcp",
+                           10050, &VpcCidr),
+
+
+    "ChefProxyELB" : {
+      "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties" : {
+        "SecurityGroups" : [ cfnRef(ChefProxyElbSG) ],
+        "Subnets" : [ cfnRef(Subnet1), cfnRef(Subnet2) ],
+        "Scheme": "internal",
+        "Listeners" : [
+                { "LoadBalancerPort": cfnRef(ChefProxyPort), "Protocol" : "TCP",
+                "InstancePort": cfnRef(ChefProxyPort),
+                  "InstanceProtocol": "TCP"
+                }
+         ],
+         "HealthCheck" : {
+           "Target" : cfnPaste("TCP:", cfnRef(ChefProxyPort)),
+           "HealthyThreshold" : "2",
+           "UnhealthyThreshold" : "6",
+           "Interval" : "30",
+           "Timeout" : "10"
+         },
+         "ConnectionDrainingPolicy" : {
+           "Enabled" : "true"
+         },
+         "CrossZone" : "true"
+     }
+    },
+
+    r53Cname(ChefProxyElbDNS, &ProxyElbCNAME, &Domain,
+             `{ "Fn::GetAtt" : [ "ChefProxyELB", "DNSName"]}'),
+
+    "ProxyASG" : {
+      "Type" : "AWS::AutoScaling::AutoScalingGroup",
+      "Properties" : {
+        "LaunchConfigurationName" : cfnRef(ProxyASLC),
+        "AvailabilityZones" : [ cfnRef(AZ1), cfnRef(AZ2) ],
+        "VPCZoneIdentifier" : [ cfnRef(Subnet1), cfnRef(Subnet2) ],
+        "MinSize" : cfnRef(ProxyMinAS),
+        "MaxSize" : cfnRef(ProxyMaxAS),
+        "LoadBalancerNames" : [ cfnRef(ChefProxyELB) ],
+        "HealthCheckType" : "ELB",
+        "HealthCheckGracePeriod" : "1800",
+        "Cooldown" : "1200",
+        "NotificationConfiguration" : {
+          "TopicARN" : cfnRef(OpsAlertsTopic),
+          "NotificationTypes" : [
+               "autoscaling:EC2_INSTANCE_LAUNCH",
+               "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
+               "autoscaling:EC2_INSTANCE_TERMINATE",
+               "autoscaling:EC2_INSTANCE_TERMINATE_ERROR"
+          ]
+        },
+      "Tags" : cfnAsgTagList("CHEF_PROXY_ASG")
+    }
+  },
+
+    "ProxyASLC" : {
+      "Type" : "AWS::AutoScaling::LaunchConfiguration",
+      "Properties" : {
+        "AssociatePublicIpAddress": "true",
+        "InstanceType" : cfnRef(ProxyInstanceType),
+        "IamInstanceProfile" : cfnRef(AppInstanceProfile),
+        "KeyName"  : cfnRef(KeyPair),
+        "ImageId"  : cfnRef(InstanceAMI),
+        "SecurityGroups" : [ cfnRef(InternalAccessSG),
+                             cfnRef(ExternalAccessSG),
+                             cfnRef(ChefProxyElbSG) ],
+        "BlockDeviceMappings" : [
+          ROOTSSD(&RootDiskSize),
+          SWAPDISK()
+        ],
+        "UserData": cfnMakeUserData(`./cf4/userdata-chef-client.sh.jl')
+      }
+    },
+
+    mkAbsoluteScalingPolicy(ProxyScaleUp,   &ProxyASG, &ProxyScaleUpCount),
+    mkAbsoluteScalingPolicy(ProxyScaleDown, &ProxyASG, &ProxyScaleDownCount),
+
+    #cwLowCpuAlarm(ProxyLowCpuAlarm, 40, 120, 2, &ProxyScaleDown, &ProxyASG),
+    #cwHighCpuAlarm(ProxyHighCpuAlarm, 60, 120, 2, &ProxyScaleUp, &ProxyASG),
+
+    cwHighNetInAlarm(ProxyHighNetInAlarm,
+                     `cfnFindInMap("BandwidthAlarmsPerInstanceType", &ProxyInstanceType, "high")',
+             300, 2, &ProxyScaleUp, & ProxyASG),
+
+    cwLowNetInAlarm(ProxyLowNetInAlarm,
+                    `cfnFindInMap("BandwidthAlarmsPerInstanceType", &ProxyInstanceType, "low")',
+300, 2, &ProxyScaleDown, & ProxyASG),
+
+
+     #mkWaitCondition(WaitCondition, "ProxyServer", &WaitHandle),
+     mkWaitConditionHandle(WaitHandle)
+
+
+   },
+
+  "Outputs" : {
+    "ChefProxyUrl" : {
+      "Value" : cfnPaste("https://", &ProxyElbCNAME, ".", &Domain,
+                          ":", &ChefProxyPort)
+     }
+  }
+
+}

@@ -1,0 +1,124 @@
+# -*- indent-tabs-mode: nil -*-
+#
+INCLUDE(cf4/sncr-cidrs.m4)
+#
+VERSION(1.4.0)
+#
+{
+  TEMPLATE(`Chef Server'),
+
+
+  "Parameters" : {
+
+    paramVpc(VpcId, `VPC ID', `vpc-00000000'),
+    paramCidrBlock(VpcCidr, `'),
+
+    paramSecurityGroup(BastionSG,`'),
+
+    paramSubnet(ChefServerSubnet,`'),
+    paramString(OpsAlertsTopic, `'),
+
+    paramString(AppInstanceProfile, `'),
+    paramKey(KeyPair,`',`no-key'),
+    paramS3Bucket(PublicBucketName, `'),
+    paramS3Bucket(PrivateBucketName, `'),
+
+    paramString(ChefEnv,`'),
+
+    paramAmi(InstanceAMI,`'),
+    paramInstanceType(AppInstanceType,
+			`Application EC2 instance type',
+			"m1.medium"),
+
+    paramPort(ChefPort,`',80),
+    paramPort(ChefsPort,`',443),
+
+    paramInteger(MaxProvisionTime,
+		 `Max seconds for the server to provision',
+		  "2000", "120", "3600"),
+
+    paramURL(ChefServerURL,`'),
+    paramString(ChefRoles,`',`base chef-server'),
+
+    paramString(NodeName, `', `oh-chef'),
+
+    paramBootPriority(0),
+    paramPurpose(infrastructure),
+
+    paramDomain(Domain,`app domain', `devops.dev.cloud.synchronoss.net'),
+    paramString(Project, `project',`NOPROJECT'),
+    paramString(Environment, `environment',`NOENVIRONMENT')
+
+  },
+
+  "Resources" : {
+
+
+    mkVpcSecurityGroup(ChefServerSG, &VpcId, `chef security group'),
+    addSecurityGroupRule(ChefServerSG, vpcicmp, in, "icmp", "-1", &VpcCidr),
+    addSecurityGroupRule(ChefServerSG, chef, in, "tcp", &ChefPort, &VpcCidr),
+    addSecurityGroupRule(ChefServerSG, chefss, in, "tcp", cfnRef(ChefsPort),
+           &VpcCidr),
+
+    addSecurityGroupRule(ChefServerSG, pabeticmp, in, "icmp", "-1", "pabetCIDR"),
+    addSecurityGroupRule(ChefServerSG, pabetchef, in, "tcp", cfnRef(ChefPort),
+           "pabetCIDR"),
+    addSecurityGroupRule(ChefServerSG, pabetchefs, in, "tcp", cfnRef(ChefsPort),
+           "pabetCIDR"),
+
+# chef server needs to be accessed on the eip
+
+  addSecurityGroupRule(ChefServerSG, allchef, in, "tcp", cfnRef(ChefPort),
+           "allCIDR"),
+  addSecurityGroupRule(ChefServerSG, allchefs, in, "tcp", cfnRef(ChefsPort),
+           "allCIDR"),
+
+
+
+    "ChefServer" : {
+      "Type" : "AWS::EC2::Instance",
+      "Properties" : {
+        "SubnetId" : cfnRef(ChefServerSubnet),
+        "InstanceType" : cfnRef(AppInstanceType),
+        "IamInstanceProfile" : cfnRef(AppInstanceProfile),
+        "KeyName" : cfnRef(KeyPair),
+        "SecurityGroupIds" : json_listify(cfnRef(ChefServerSG),cfnRef(BastionSG)),
+        "ImageId" : cfnRef(InstanceAMI),
+        "BlockDeviceMappings" : [
+          ROOTSSD(12),
+          SWAPDISK(),
+          OPTDISK(25)
+        ],
+
+     "UserData": cfnMakeInstallSh(`./cf4/userdata-chef-server.sh.jl',`XX','YY'),
+          "Tags" : cfnInstanceTagList("CHEF_SERVER")
+      }
+    },
+
+
+   mkVpcElasticIP(ChefEIP,ChefServer),
+
+   r53Cname(ChefCname, `cfnPaste(&NodeName, "-eip")', &Domain,
+                       `cfnPaste(&NodeName, ".", &Domain)'),
+
+   r53HostAddr(ChefEipRecord, &NodeName, &Domain, &ChefEIP),
+
+   r53HostAddr(ChefPrivateAddrRecord, `cfnPaste(&NodeName, "-vpc")',
+                                      &Domain,
+   				      `cfnGetAttr("ChefServer", "PrivateIp")'),
+
+
+
+   mkWaitCondition(WaitCondition,
+    		    "ChefServer", &WaitHandle, &MaxProvisionTime),
+
+   mkWaitConditionHandle(WaitHandle)
+
+  },
+  "Outputs" : {
+    "ChefServerWaitResult" : {
+      "Value" : { "Fn::GetAtt" : [ "WaitCondition", "Data" ] },
+      "Description" : "Reported Wait Data"
+    }
+  }
+}

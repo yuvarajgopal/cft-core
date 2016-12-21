@@ -1,0 +1,142 @@
+# -*- indent-tabs-mode: nil -*-
+#
+#
+# creates a zabbix server
+#
+VERSION(1.4.0)
+#
+# this is still experimental
+# and, it should not have to be a special server type.  it should be
+# implemented as a generic server with a zabbix security group
+#
+INCLUDE(cf4/sncr-cidrs.m4)
+#
+{
+  TEMPLATE(`Zabbix Server'),
+
+  "Parameters" : {
+
+    paramVpc(VpcId, `VPC ID', `vpc-00000000'),
+    paramCidrBlock(VpcCidr, `'),
+
+    paramSecurityGroup(BastionSG, `'),
+    paramSecurityGroup(SshSG, `'),
+
+    paramSubnet(Subnet,`'),
+    paramString(OpsAlertsTopic, `'),
+
+    paramString(AppInstanceProfile, `'),
+    paramKey(KeyPair,`',`no-key'),
+    paramS3Bucket(PublicBucketName, `'),
+    paramS3Bucket(PrivateBucketName, `'),
+
+    paramString(ChefEnv, `'),
+    paramString(ChefRoles, `'),
+    paramString(ChefServerURL, `'),
+    paramString(ChefProxyURL, `'),
+
+    paramDiskSize(RootDiskSize, `', `12'),
+    paramDiskSize(OptDiskSize, `'),
+
+    paramAmi(InstanceAMI,`'),
+    paramInstanceType(AppInstanceType,
+      `Application EC2 Instance type',
+      "m1.small"),
+
+    paramInteger(MaxProvisionTime,
+      `Max seconds for the server to provision',
+      "2000", "120", "3600"),
+
+    paramString(NodeName, `', `app'),
+    paramString(NodeIndex, `', `01'),
+
+    paramBootPriority(1),
+    paramPurpose(infrastructure),
+    paramDomain(Domain, `app domain', `devops.dev.cloud.synchronoss.net'),
+    paramString(Project, `project',`NOPROJECT'),
+    paramString(Environment, `environment',`NOENVIRONMENT')
+
+  },
+
+  "Mappings" : {
+
+  },
+
+  "Conditions" : {
+
+    "NeedsOptVolume" : {
+      "Fn::Not" : [{
+        "Fn::Equals" : [ cfnRef(OptDiskSize), "0" ]
+      }]
+    }
+  },
+
+  "Resources" : {
+
+
+
+    "AppServer" : {
+      "Type" : "AWS::EC2::Instance",
+      "Properties" : {
+        "InstanceType" : cfnRef(AppInstanceType),
+        "IamInstanceProfile" : cfnRef(AppInstanceProfile),
+        "KeyName" : cfnRef(KeyPair),
+        "SubnetId" : cfnRef(Subnet),
+        "SecurityGroupIds" : json_listify(cfnRef(SshSG),cfnRef(AppServerSG),cfnRef(BastionSG)),
+        "SourceDestCheck" : "True",
+        "ImageId" : cfnRef(InstnaceAMI),
+        "BlockDeviceMappings" : [
+          ROOTSSD(&RootDiskSize),
+          SWAPDISK()
+        ],
+        "UserData" : cfnMakeInstallSh(`./cf4/userdata-chef-client.sh.jl',`AppTest','App'),
+        "Tags" : cfnInstanceTagList(`cfnPaste(&NodeName, &NodeIndex)')
+     }
+    },
+
+    "OptVolume" : {
+      "Type" : "AWS::EC2::Volume",
+      "Condition" : "NeedsOptVolume",
+      "Properties" : {
+        "Size" : cfnRef(OptDiskSize),
+        "AvailabilityZone" : cfnGetAttr("AppServer", "AvailabilityZone")
+      }
+    },
+
+    "OptMount" : {
+      "Type" : "AWS::EC2::VolumeAttachment",
+      "Condition" : "NeedsOptVolume",
+      "Properties" : {
+        "InstanceId" : cfnRef(AppServer),
+        "VolumeId"  : cfnRef(OptVolume),
+        "Device" : "OPTDEV"
+      }
+    },
+
+    mkVpcElasticIP(AppEIP, AppServer),
+
+    r53HostAddr(AppPrivateAddrRecord,
+                `cfnPaste(&NodeName, &NodeIndex, "-vpc")',
+                &Domain,
+                `cfnGetAttr("AppServer", "PrivateIp")'),
+
+    r53HostAddr(AppEIPRecord,
+                `cfnPaste(&NodeName, &NodeIndex)',
+                &Domain,
+                &AppEIP),
+
+    r53Cname(AppCname,  `cfnPaste(&NodeName, "-", &NodeIndex, "-eip")', &Domain,
+                        `cfnPaste(&NodeName, &NodeIndex, ".", &Domain)'),
+
+    mkWaitConditionHandle(WaitHandle),
+
+    mkWaitCondition(WaitCondition, "AppServer", &WaitHandle, &MaxProvisionTime)
+  },
+
+  "Outputs" : {
+    "AppServerWaitResult" : {
+      "Value" : { "Fn::GetAtt" : [ "WaitCondition", "Data" ] },
+      "Description" : "Reported Wait Data"
+    }
+  }
+}

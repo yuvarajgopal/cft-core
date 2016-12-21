@@ -1,0 +1,74 @@
+# -*- indent-tabs-mode: nil -*-
+#
+VERSION(1.4.1)
+#
+
+{
+  TEMPLATE(`Subnets for DEV'),
+
+  "Parameters" : {
+
+    paramString(Project, `project',`NOPROJECT'),
+    paramString(Environment, `environment',`NOENVIRONMENT'),
+
+    paramAZ(AZ1, `First Availability Zone', `us-east-1a'),
+    paramAZ(AZ2, `Second Availability Zone', `us-east-1b'),
+
+    paramVpc(VpcId, `VPC ID', `vpc-00000000'),
+
+    paramNetworkAcl(DefaultAcl,`'),
+    paramRouteTable(PublicRT, `public route table for vpc'),
+    paramRouteTable(PrivateAz1RT, `private route table for vpc AZ1'),
+    paramRouteTable(PrivateAz2RT, `private route table for vpc AZ2')
+
+
+   },
+
+  "Mappings" : {
+
+    INCLUDE(cf4/subnets-dev.map)
+
+  },
+
+  "Resources" : {
+
+
+  mkVpcSubnet(DmzAZ1Subnet, &VpcId, `"DMZ-AZ1"', &AZ1),
+    assocSubnet2RouteTable(dmzaz1toPublicRTassoc, &DmzAZ1Subnet, &PublicRT),
+    assocNetworkAcl2Subnet(&DefaultAcl,&DmzAZ1Subnet),
+
+  mkVpcSubnet(DmzAZ2Subnet, &VpcId, `"DMZ-AZ2"', &AZ2),
+    assocSubnet2RouteTable(dmzaz2toPublicRTassoc, &DmzAZ2Subnet, &PublicRT),
+    assocNetworkAcl2Subnet(&DefaultAcl,&DmzAZ2Subnet),
+
+  mkVpcSubnet(PublicAZ1Subnet, &VpcId, `"PUBLIC-AZ1"', &AZ1),
+    assocSubnet2RouteTable(publicaz1toPublicRTassoc,
+                           &PublicAZ1Subnet, &PublicRT),
+    assocNetworkAcl2Subnet(&DefaultAcl, &PublicAZ1Subnet),
+
+  mkVpcSubnet(PublicAZ2Subnet, &VpcId, `"PUBLIC-AZ2"', &AZ2),
+    assocSubnet2RouteTable(publicaz2toPublicRTassoc,
+                           &PublicAZ2Subnet, &PublicRT),
+    assocNetworkAcl2Subnet(&DefaultAcl, &PublicAZ2Subnet),
+
+  mkVpcSubnet(PrivateAZ1Subnet, &VpcId, `"PRIVATE-AZ1"', &AZ1),
+    assocSubnet2RouteTable(privateaz1toPrivateRTassoc,
+                           &PrivateAZ1Subnet, &PrivateAz1RT),
+    assocNetworkAcl2Subnet(&DefaultAcl, &PrivateAZ1Subnet),
+
+  mkVpcSubnet(PrivateAZ2Subnet, &VpcId, `"PRIVATE-AZ2"', &AZ2),
+    assocSubnet2RouteTable(privateaz2toPrivateRTassoc,
+                           &PrivateAZ2Subnet, &PrivateAz2RT),
+    assocNetworkAcl2Subnet(&DefaultAcl, &PrivateAZ2Subnet),
+
+  mkVpcSubnet(MgmtAZ1Subnet, &VpcId, `"MGMT-AZ1"', &AZ1),
+    assocSubnet2RouteTable(mgmtaz1toPublicRTassoc, &MgmtAZ1Subnet, &PublicRT),
+    assocNetworkAcl2Subnet(&DefaultAcl,&MgmtAZ1Subnet),
+
+  mkVpcSubnet(MgmtAZ2Subnet, &VpcId, `"MGMT-AZ2"', &AZ2),
+    assocSubnet2RouteTable(mgmtaz2toPublicRTassoc, &MgmtAZ2Subnet, &PublicRT),
+    assocNetworkAcl2Subnet(&DefaultAcl,&MgmtAZ2Subnet)
+
+    }
+
+  }

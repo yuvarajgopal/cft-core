@@ -1,0 +1,42 @@
+# -*- indent-tabs-mode: nil -*-
+#
+# create a security group for the zabbix server
+#
+VERSION(1.4.0)
+#
+
+INCLUDE(cf4/sncr-cidrs.m4)
+
+{
+  TEMPLATE(`Zabbix Server Security Group'),
+
+  "Parameters" : {
+
+    paramVpc(VpcId, `VPC ID', `vpc-00000000'),
+    paramCidrBlock(VpcCidr, `'),
+
+    paramPort(HTTP, `', 80),
+    paramPort(HTTPS, `', 443),
+    paramPort(ZabbixTrap, `', 10050),
+    paramPort(ZabbixAgent, `', 10051),
+
+    paramDomain(Domain, `app domain', `devops.dev.cloud.synchronoss.net'),
+    paramString(Project, `project', `NOPROJECT'),
+    paramString(Environment, `environment', `NOENVIRONMENT')
+  },
+
+  "Resources" : {
+
+    mkVpcSecurityGroup(ZabbixServerSG, &VpcId, `Zabbix Server Security Group'),
+    addSecurityGroupRule(ZabbixServerSG, vpcicmp, in, "icmp", "-1", &VpcCidr),
+    addSecurityGroupRule(ZabbixServerSG, pabeticmp, in, "icmp", "-1", "pabetCIDR"),
+    addSecurityGroupRule(ZabbixServerSG, http, in, "tcp", &HTTP, "allCIDR"),
+    addSecurityGroupRule(ZabbixServerSG, https, in, "tcp", &HTTPS, "allCIDR"),
+    addSecurityGroupRule(ZabbixServerSG, zabbixtrap, in, "tcp", &ZabbixTrap, &VpcCidr),
+    addSecurityGroupRule(ZabbixServerSG, zabbixagent, in, "tcp", &ZabbixAgent, &VpcCidr)
+  },
+
+  "Outputs" : {
+    output(ZabbixServerSG,`Zabbix Server Securty Group')
+  }
+}

@@ -1,0 +1,90 @@
+# -*- indent-tabs-mode: nil -*-
+
+#
+VERSION(1.8.1)
+#
+INCLUDE(cf4/sncr-cidrs.m4)
+#
+{
+   TEMPLATE(`Network ACLs'),
+
+
+  "Parameters" : {
+    paramVpc(VpcId, `VPC ID', `vpc-00000000'),
+    paramCidrBlock(VpcCidr,`VPC CIDR', `0.0.0.0/0'),
+
+    paramString(Project, `project',`NOPROJECT'),
+    paramString(Environment, `environment',`NOENVENIRONMENT')
+    },
+
+  "Resources" : {
+
+    mkNetworkAcl(DefaultAcl, cfnRef(VpcId)),
+
+      "AllowAllOutboundACL" : {
+        "Type" : "AWS::EC2::NetworkAclEntry",
+        "Properties" : {
+          "NetworkAclId": cfnRef(DefaultAcl),
+          "Egress" : "true",
+          "RuleAction" : "Allow",
+          "RuleNumber" : "1000",
+          "Protocol" : "-1",
+          "CidrBlock" : "allCIDR",
+          "Icmp" : { "Code" : "-1", "Type" : "-1" },
+          "PortRange" : { "From" : "0", "To" : "65535" }
+        }
+      },
+
+      "AllowLocalIcmpInboundACL" : {
+        "Type" : "AWS::EC2::NetworkAclEntry",
+        "Properties" : {
+          "NetworkAclId": cfnRef(DefaultAcl),
+          "Egress" : "false",
+          "RuleAction" : "Allow",
+          "RuleNumber" : "10",
+          "Protocol" : "1",
+          "CidrBlock" : cfnRef(VpcCidr),
+          "Icmp" : { "Code" : "-1", "Type" : "-1" }
+        }
+      },
+
+      aclAllowIn(AllowLocalUdpInboundACL, &DefaultAcl, 11,
+                                           UDPproto, 0, &VpcCidr, 65535),
+
+      aclAllowIn(AllowLocalTcpInboundACL, &DefaultAcl,
+                 12, TCPproto, 0, &VpcCidr, 65535),
+
+      aclAllowIn(AllowAllNtpInboundACL, &DefaultAcl,
+                 "220", "17", NTPport, "allCIDR"),
+
+      aclAllowIn(allhttpACL, &DefaultAcl,
+                 "800", "6", "80", "allCIDR"),
+
+      aclAllowIn(allhttpsACL, &DefaultAcl,
+                 "801", "6", "443", "allCIDR"),
+
+
+      aclAllowIn(AllowAllTcpEphemeral, &DefaultAcl, 1000,
+                                  6, 1024, "allCIDR", 65535),
+
+      aclAllowIn(AllowAgainAllTcpEphemeral, &DefaultAcl, 1001,
+                                  6, 1024, "allCIDR", 65535),
+
+      # only allow limited ssh in
+      aclAllowIn(AllowPABetExtSshInboundACL,&DefaultAcl,
+                 "500","6","22","pabetEXT"),
+
+      aclAllowIn(AllowNJBrwExtSshInboundACL,&DefaultAcl,
+                 "501", TCPproto, SSHport, "njbrwEXT"),
+
+#     allow ssh access from the ivpc, us-east-1, change as needed
+      aclAllowIn(DefaultAclAllowIvpcUseast1SshInboundACL,&DefaultAcl,
+                 "502","6","22","ivpcUsEast1CIDR")
+
+  },
+
+  "Outputs": {
+    output(DefaultAcl,`Default NETACL')
+  }
+
+}

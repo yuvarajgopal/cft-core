@@ -1,0 +1,288 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Network ACLs [1.8.1]",
+  "Parameters": {
+    "VpcId": {
+      "Description": "VPC ID",
+      "Type": "String",
+      "Default": "vpc-00000000",
+      "AllowedPattern": "vpc-[0-9a-f]{8}",
+      "ConstraintDescription": "a valid aws vpc id"
+    },
+    "VpcCidr": {
+      "Description": "VPC CIDR",
+      "Type": "String",
+      "Default": "0.0.0.0/0",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "a valid CIDR specification"
+    },
+    "Project": {
+      "Type": "String",
+      "Default": "NOPROJECT",
+      "Description": "project"
+    },
+    "Environment": {
+      "Type": "String",
+      "Default": "NOENVENIRONMENT",
+      "Description": "environment"
+    }
+  },
+  "Resources": {
+    "DefaultAcl": {
+      "Type": "AWS::EC2::NetworkAcl",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "DefaultAcl_NETACL"
+          },
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackName"
+            }
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "project",
+            "Value": {
+              "Ref": "Project"
+            }
+          }
+        ]
+      }
+    },
+    "AllowAllOutboundACL": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "DefaultAcl"
+        },
+        "Egress": "true",
+        "RuleAction": "Allow",
+        "RuleNumber": "1000",
+        "Protocol": "-1",
+        "CidrBlock": "0.0.0.0/0",
+        "Icmp": {
+          "Code": "-1",
+          "Type": "-1"
+        },
+        "PortRange": {
+          "From": "0",
+          "To": "65535"
+        }
+      }
+    },
+    "AllowLocalIcmpInboundACL": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "DefaultAcl"
+        },
+        "Egress": "false",
+        "RuleAction": "Allow",
+        "RuleNumber": "10",
+        "Protocol": "1",
+        "CidrBlock": {
+          "Ref": "VpcCidr"
+        },
+        "Icmp": {
+          "Code": "-1",
+          "Type": "-1"
+        }
+      }
+    },
+    "AllowLocalUdpInboundACL": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "DefaultAcl"
+        },
+        "Egress": "false",
+        "RuleAction": "Allow",
+        "RuleNumber": "11",
+        "Protocol": "17",
+        "CidrBlock": {
+          "Ref": "VpcCidr"
+        },
+        "PortRange": {
+          "From": "0",
+          "To": "65535"
+        }
+      }
+    },
+    "AllowLocalTcpInboundACL": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "DefaultAcl"
+        },
+        "Egress": "false",
+        "RuleAction": "Allow",
+        "RuleNumber": "12",
+        "Protocol": "6",
+        "CidrBlock": {
+          "Ref": "VpcCidr"
+        },
+        "PortRange": {
+          "From": "0",
+          "To": "65535"
+        }
+      }
+    },
+    "AllowAllNtpInboundACL": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "DefaultAcl"
+        },
+        "Egress": "false",
+        "RuleAction": "Allow",
+        "RuleNumber": "220",
+        "Protocol": "17",
+        "CidrBlock": "0.0.0.0/0",
+        "PortRange": {
+          "From": "123",
+          "To": "123"
+        }
+      }
+    },
+    "allhttpACL": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "DefaultAcl"
+        },
+        "Egress": "false",
+        "RuleAction": "Allow",
+        "RuleNumber": "800",
+        "Protocol": "6",
+        "CidrBlock": "0.0.0.0/0",
+        "PortRange": {
+          "From": "80",
+          "To": "80"
+        }
+      }
+    },
+    "allhttpsACL": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "DefaultAcl"
+        },
+        "Egress": "false",
+        "RuleAction": "Allow",
+        "RuleNumber": "801",
+        "Protocol": "6",
+        "CidrBlock": "0.0.0.0/0",
+        "PortRange": {
+          "From": "443",
+          "To": "443"
+        }
+      }
+    },
+    "AllowAllTcpEphemeral": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "DefaultAcl"
+        },
+        "Egress": "false",
+        "RuleAction": "Allow",
+        "RuleNumber": "1000",
+        "Protocol": "6",
+        "CidrBlock": "0.0.0.0/0",
+        "PortRange": {
+          "From": "1024",
+          "To": "65535"
+        }
+      }
+    },
+    "AllowAgainAllTcpEphemeral": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "DefaultAcl"
+        },
+        "Egress": "false",
+        "RuleAction": "Allow",
+        "RuleNumber": "1001",
+        "Protocol": "6",
+        "CidrBlock": "0.0.0.0/0",
+        "PortRange": {
+          "From": "1024",
+          "To": "65535"
+        }
+      }
+    },
+    "AllowPABetExtSshInboundACL": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "DefaultAcl"
+        },
+        "Egress": "false",
+        "RuleAction": "Allow",
+        "RuleNumber": "500",
+        "Protocol": "6",
+        "CidrBlock": "68.170.18.0/25",
+        "PortRange": {
+          "From": "22",
+          "To": "22"
+        }
+      }
+    },
+    "AllowNJBrwExtSshInboundACL": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "DefaultAcl"
+        },
+        "Egress": "false",
+        "RuleAction": "Allow",
+        "RuleNumber": "501",
+        "Protocol": "6",
+        "CidrBlock": "68.170.22.0/24",
+        "PortRange": {
+          "From": "22",
+          "To": "22"
+        }
+      }
+    },
+    "DefaultAclAllowIvpcUseast1SshInboundACL": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "DefaultAcl"
+        },
+        "Egress": "false",
+        "RuleAction": "Allow",
+        "RuleNumber": "502",
+        "Protocol": "6",
+        "CidrBlock": "10.236.100.0/23",
+        "PortRange": {
+          "From": "22",
+          "To": "22"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "DefaultAcl": {
+      "Description": "Default NETACL",
+      "Value": {
+        "Ref": "DefaultAcl"
+      }
+    }
+  }
+}

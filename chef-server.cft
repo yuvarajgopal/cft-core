@@ -1,0 +1,844 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Chef Server [1.4.0]",
+  "Parameters": {
+    "VpcId": {
+      "Description": "VPC ID",
+      "Type": "String",
+      "Default": "vpc-00000000",
+      "AllowedPattern": "vpc-[0-9a-f]{8}",
+      "ConstraintDescription": "a valid aws vpc id"
+    },
+    "VpcCidr": {
+      "Description": "",
+      "Type": "String",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "a valid CIDR specification"
+    },
+    "BastionSG": {
+      "Description": "Security Group ID",
+      "Type": "String",
+      "Default": "sg-00000000",
+      "AllowedPattern": "sg-[0-9a-f]{8}",
+      "ConstraintDescription": "a valid aws security group id"
+    },
+    "ChefServerSubnet": {
+      "Description": "Subnet Id",
+      "Type": "String",
+      "Default": "subnet-00000000",
+      "AllowedPattern": "subnet-[0-9a-f]{8}",
+      "ConstraintDescription": "a valid aws subnet id"
+    },
+    "OpsAlertsTopic": {
+      "Type": "String",
+      "Description": ""
+    },
+    "AppInstanceProfile": {
+      "Type": "String",
+      "Description": ""
+    },
+    "KeyPair": {
+      "Description": "",
+      "Type": "String",
+      "Default": "no-key",
+      "MinLength": "1",
+      "MaxLength": "64",
+      "AllowedPattern": "[-_ a-zA-Z0-9]*",
+      "ConstraintDescription": "a valid key"
+    },
+    "PublicBucketName": {
+      "Description": "S3 Bucket Name",
+      "Type": "String",
+      "AllowedPattern": "[-A-Za-z0-9.]{2,64}",
+      "ConstraintDescription": "a S3 bucket name"
+    },
+    "PrivateBucketName": {
+      "Description": "S3 Bucket Name",
+      "Type": "String",
+      "AllowedPattern": "[-A-Za-z0-9.]{2,64}",
+      "ConstraintDescription": "a S3 bucket name"
+    },
+    "ChefEnv": {
+      "Type": "String",
+      "Description": ""
+    },
+    "InstanceAMI": {
+      "Description": "Machine Image",
+      "Type": "String",
+      "Default": "ami-00000000",
+      "AllowedPattern": "ami-[0-9a-f]{8}",
+      "ConstraintDescription": "a valid aws image id"
+    },
+    "AppInstanceType": {
+      "Description": "Application EC2 instance type",
+      "Type": "String",
+      "Default": "m1.medium",
+      "AllowedValues": [
+        "t1.micro",
+        "t2.micro",
+        "t2.small",
+        "t2.medium",
+        "t2.large",
+        "m1.small",
+        "m1.medium",
+        "m1.large",
+        "m1.xlarge",
+        "m2.xlarge",
+        "m2.2xlarge",
+        "m2.4xlarge",
+        "m3.medium",
+        "m3.large",
+        "m3.xlarge",
+        "m3.2xlarge",
+        "m4.large",
+        "m4.xlarge",
+        "m4.2xlarge",
+        "m4.4xlarge",
+        "m4.10xlarge",
+        "c1.medium",
+        "c1.xlarge",
+        "c3.large",
+        "c3.xlarge",
+        "c3.2xlarge",
+        "c3.4xlarge",
+        "c3.8xlarge",
+        "c4.large",
+        "c4.xlarge",
+        "c4.2xlarge",
+        "c4.4xlarge",
+        "c4.8xlarge",
+        "cc1.4xlarge",
+        "cc2.8xlarge",
+        "cg1.4xlarge",
+        "cr1.8xlarge",
+        "d2.xlarge",
+        "d2.2xlarge",
+        "d2.4xlarge",
+        "d2.8xlarge",
+        "g2.2xlarge",
+        "g2.8xlarge",
+        "hi1.4xlarge",
+        "hs1.8xlarge",
+        "i2.xlarge",
+        "i2.2xlarge",
+        "i2.4xlarge",
+        "i2.8xlarge",
+        "r3.large",
+        "r3.xlarge",
+        "r3.2xlarge",
+        "r3.4xlarge",
+        "r3.8xlarge"
+      ],
+      "ConstraintDescription": "a valid EC2 instance type."
+    },
+    "ChefPort": {
+      "Default": "80",
+      "Description": "",
+      "Type": "Number",
+      "MinValue": "1",
+      "MaxValue": "65535"
+    },
+    "ChefsPort": {
+      "Default": "443",
+      "Description": "",
+      "Type": "Number",
+      "MinValue": "1",
+      "MaxValue": "65535"
+    },
+    "MaxProvisionTime": {
+      "Default": "2000",
+      "Description": "Max seconds for the server to provision",
+      "Type": "Number",
+      "MinValue": "120",
+      "MaxValue": "3600"
+    },
+    "ChefServerURL": {
+      "Description": "",
+      "Type": "String",
+      "MinLength": "10",
+      "MaxLength": "128",
+      "AllowedPattern": "[a-z][a-z0-9]*://[-a-z0-9.]*(:[0-9]{1,5})?",
+      "ConstraintDescription": "a valid URL"
+    },
+    "ChefRoles": {
+      "Type": "String",
+      "Default": "base chef-server",
+      "Description": ""
+    },
+    "NodeName": {
+      "Type": "String",
+      "Default": "oh-chef",
+      "Description": ""
+    },
+    "BootPriority": {
+      "Description": "Boot Priority Level",
+      "Type": "Number",
+      "Default": "0",
+      "MinValue": "0"
+    },
+    "Purpose": {
+      "Description": "Instance Purpose",
+      "Type": "String",
+      "Default": "infrastructure",
+      "AllowedPattern": "[A-Za-z0-9_-]+"
+    },
+    "Domain": {
+      "Description": "app domain",
+      "Type": "String",
+      "Default": "devops.dev.cloud.synchronoss.net",
+      "AllowedPattern": "[-A-Za-z0-9.]+\\.[A-Za-z]{2,4}",
+      "ConstraintDescription": "a domain"
+    },
+    "Project": {
+      "Type": "String",
+      "Default": "NOPROJECT",
+      "Description": "project"
+    },
+    "Environment": {
+      "Type": "String",
+      "Default": "NOENVIRONMENT",
+      "Description": "environment"
+    }
+  },
+  "Resources": {
+    "ChefServerSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "chef security group",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "ChefServerSG"
+          },
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackName"
+            }
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "project",
+            "Value": {
+              "Ref": "Project"
+            }
+          }
+        ]
+      }
+    },
+    "ChefServerSGrvpcicmpin": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "ChefServerSG"
+        },
+        "IpProtocol": "icmp",
+        "CidrIp": {
+          "Ref": "VpcCidr"
+        },
+        "FromPort": "-1",
+        "ToPort": "-1"
+      }
+    },
+    "ChefServerSGrchefin": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "ChefServerSG"
+        },
+        "IpProtocol": "tcp",
+        "CidrIp": {
+          "Ref": "VpcCidr"
+        },
+        "FromPort": {
+          "Ref": "ChefPort"
+        },
+        "ToPort": {
+          "Ref": "ChefPort"
+        }
+      }
+    },
+    "ChefServerSGrchefssin": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "ChefServerSG"
+        },
+        "IpProtocol": "tcp",
+        "CidrIp": {
+          "Ref": "VpcCidr"
+        },
+        "FromPort": {
+          "Ref": "ChefsPort"
+        },
+        "ToPort": {
+          "Ref": "ChefsPort"
+        }
+      }
+    },
+    "ChefServerSGrpabeticmpin": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "ChefServerSG"
+        },
+        "IpProtocol": "icmp",
+        "CidrIp": "10.6.0.0/16",
+        "FromPort": "-1",
+        "ToPort": "-1"
+      }
+    },
+    "ChefServerSGrpabetchefin": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "ChefServerSG"
+        },
+        "IpProtocol": "tcp",
+        "CidrIp": "10.6.0.0/16",
+        "FromPort": {
+          "Ref": "ChefPort"
+        },
+        "ToPort": {
+          "Ref": "ChefPort"
+        }
+      }
+    },
+    "ChefServerSGrpabetchefsin": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "ChefServerSG"
+        },
+        "IpProtocol": "tcp",
+        "CidrIp": "10.6.0.0/16",
+        "FromPort": {
+          "Ref": "ChefsPort"
+        },
+        "ToPort": {
+          "Ref": "ChefsPort"
+        }
+      }
+    },
+    "ChefServerSGrallchefin": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "ChefServerSG"
+        },
+        "IpProtocol": "tcp",
+        "CidrIp": "0.0.0.0/0",
+        "FromPort": {
+          "Ref": "ChefPort"
+        },
+        "ToPort": {
+          "Ref": "ChefPort"
+        }
+      }
+    },
+    "ChefServerSGrallchefsin": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "ChefServerSG"
+        },
+        "IpProtocol": "tcp",
+        "CidrIp": "0.0.0.0/0",
+        "FromPort": {
+          "Ref": "ChefsPort"
+        },
+        "ToPort": {
+          "Ref": "ChefsPort"
+        }
+      }
+    },
+    "ChefServer": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "ChefServerSubnet"
+        },
+        "InstanceType": {
+          "Ref": "AppInstanceType"
+        },
+        "IamInstanceProfile": {
+          "Ref": "AppInstanceProfile"
+        },
+        "KeyName": {
+          "Ref": "KeyPair"
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "ChefServerSG"
+          },
+          {
+            "Ref": "BastionSG"
+          }
+        ],
+        "ImageId": {
+          "Ref": "InstanceAMI"
+        },
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "VolumeSize": "12",
+              "VolumeType": "gp2"
+            }
+          },
+          {
+            "DeviceName": "/dev/xvdb",
+            "VirtualName": "ephemeral0"
+          },
+          {
+            "DeviceName": "/dev/xvdf",
+            "Ebs": {
+              "VolumeSize": "25"
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash",
+                "\n",
+                "",
+                "\n",
+                "exec > >(tee /var/log/userdata.log|logger -t userdata -s 2>/dev/console) 2>&1",
+                "\n",
+                "",
+                "\n",
+                "export HOME=/root",
+                "\n",
+                "export PATH=$PATH:/usr/local/sbin",
+                "\n",
+                "",
+                "\n",
+                "logger -s -t userdata 'create the environment descriptor file'",
+                "\n",
+                "",
+                "\n",
+                "SNCR_AWS_ENV='/usr/local/etc/sncr-aws-env.sh'",
+                "\n",
+                "",
+                "\n",
+                "cat <<EOF > $SNCR_AWS_ENV",
+                "\n",
+                "DOMAIN='",
+                {
+                  "Ref": "Domain"
+                },
+                "'",
+                "\n",
+                "NODENAME='",
+                {
+                  "Ref": "NodeName"
+                },
+                "'",
+                "\n",
+                "PRIVATEBUCKET='",
+                {
+                  "Ref": "PrivateBucketName"
+                },
+                "'",
+                "\n",
+                "PUBLICBUCKET='",
+                {
+                  "Ref": "PublicBucketName"
+                },
+                "'",
+                "\n",
+                "PROJECT_NAME='",
+                {
+                  "Ref": "Project"
+                },
+                "'",
+                "\n",
+                "PROJECT_ENV='",
+                {
+                  "Ref": "Environment"
+                },
+                "'",
+                "\n",
+                "AWS_REGION='",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "'",
+                "\n",
+                "OPS_ALERTS_TOPIC='",
+                {
+                  "Ref": "OpsAlertsTopic"
+                },
+                "'",
+                "\n",
+                "CHEF_SERVER='",
+                {
+                  "Ref": "ChefServerURL"
+                },
+                "'",
+                "\n",
+                "CHEF_ENV='",
+                {
+                  "Ref": "ChefEnv"
+                },
+                "'",
+                "\n",
+                "CHEF_ROLES='",
+                {
+                  "Ref": "ChefRoles"
+                },
+                "'",
+                "\n",
+                "CF_WAIT_HANDLE='",
+                {
+                  "Ref": "WaitHandle"
+                },
+                "'",
+                "\n",
+                "",
+                "\n",
+                "export DOMAIN NODENAME NODEINDEX",
+                "\n",
+                "export PUBLICBUCKET PRIVATEBUCKET",
+                "\n",
+                "export PROJECT_NAME PROJECT_ENV",
+                "\n",
+                "export AWS_REGION",
+                "\n",
+                "export OPS_ALERTS_TOPIC",
+                "\n",
+                "export CHEF_SERVER CHEF_ENV CHEF_ROLES",
+                "\n",
+                "export CF_WAIT_HANDLE",
+                "\n",
+                "EOF",
+                "\n",
+                "chmod 0644 $SNCR_AWS_ENV",
+                "\n",
+                "",
+                "\n",
+                "chown root:root $SNCR_AWS_ENV",
+                "\n",
+                "",
+                "\n",
+                ". $SNCR_AWS_ENV",
+                "\n",
+                "",
+                "\n",
+                "yum update --security -y",
+                "\n",
+                "",
+                "\n",
+                "cd /usr/local/sbin",
+                "\n",
+                "",
+                "\n",
+                "",
+                "\n",
+                "",
+                "\n",
+                "logger -s -t userdata 'fetch the helper scripts'",
+                "\n",
+                "",
+                "\n",
+                "helpers='configure-network.sh mount-disks.sh install-awscli.sh install-chef-server.sh signal-wait-handle.sh sncr-aws-versions.sh create-chef-server-certificate.sh'",
+                "\n",
+                "",
+                "\n",
+                "for helper in $helpers; do",
+                "\n",
+                "  logger -s -t userdata \"Fetching $helper \"",
+                "\n",
+                "  wget http://${PUBLICBUCKET}.s3.amazonaws.com/public/$helper",
+                "\n",
+                "  chmod u=rx,go=r $helper",
+                "\n",
+                "  chown root:root $helper",
+                "\n",
+                "done",
+                "\n",
+                "",
+                "\n",
+                "logger -s -t userdata 'move the versions file to /usr/local/etc'",
+                "\n",
+                "mv -f sncr-aws-versions.sh /usr/local/etc",
+                "\n",
+                "",
+                "\n",
+                "# now start executing the helpers",
+                "\n",
+                "",
+                "\n",
+                "install-awscli.sh",
+                "\n",
+                "",
+                "\n",
+                "mount-disks.sh",
+                "\n",
+                "",
+                "\n",
+                "configure-network.sh",
+                "\n",
+                "",
+                "\n",
+                "install-chef-server.sh",
+                "\n",
+                "",
+                "\n",
+                "# for now, guarantee success",
+                "\n",
+                "rc=0",
+                "\n",
+                "",
+                "\n",
+                "signal-wait-handle.sh $rc 'install chef server'",
+                "\n",
+                "",
+                "\n",
+                "echo \"Initiating a reboot\"",
+                "\n",
+                "sync",
+                "\n",
+                "sync",
+                "\n",
+                "reboot",
+                "\n"
+              ]
+            ]
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "CHEF_SERVER"
+          },
+          {
+            "Key": "BootPriority",
+            "Value": {
+              "Ref": "BootPriority"
+            }
+          },
+          {
+            "Key": "Purpose",
+            "Value": {
+              "Ref": "Purpose"
+            }
+          },
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackName"
+            }
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "project",
+            "Value": {
+              "Ref": "Project"
+            }
+          }
+        ]
+      }
+    },
+    "ChefEIP": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "ChefServer"
+        },
+        "Domain": "vpc"
+      }
+    },
+    "ChefCname": {
+      "Type": "AWS::Route53::RecordSet",
+      "Properties": {
+        "Comment": "",
+        "HostedZoneName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "Domain"
+              },
+              "."
+            ]
+          ]
+        },
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Fn::Join": [
+                  "",
+                  [
+                    {
+                      "Ref": "NodeName"
+                    },
+                    "-eip"
+                  ]
+                ]
+              },
+              ".",
+              {
+                "Ref": "Domain"
+              },
+              "."
+            ]
+          ]
+        },
+        "Type": "CNAME",
+        "TTL": "300",
+        "ResourceRecords": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                {
+                  "Ref": "NodeName"
+                },
+                ".",
+                {
+                  "Ref": "Domain"
+                }
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    "ChefEipRecord": {
+      "Type": "AWS::Route53::RecordSet",
+      "Properties": {
+        "Comment": "",
+        "HostedZoneName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "Domain"
+              },
+              "."
+            ]
+          ]
+        },
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "NodeName"
+              },
+              ".",
+              {
+                "Ref": "Domain"
+              },
+              "."
+            ]
+          ]
+        },
+        "Type": "A",
+        "TTL": "300",
+        "ResourceRecords": [
+          {
+            "Ref": "ChefEIP"
+          }
+        ]
+      }
+    },
+    "ChefPrivateAddrRecord": {
+      "Type": "AWS::Route53::RecordSet",
+      "Properties": {
+        "Comment": "",
+        "HostedZoneName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "Domain"
+              },
+              "."
+            ]
+          ]
+        },
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Fn::Join": [
+                  "",
+                  [
+                    {
+                      "Ref": "NodeName"
+                    },
+                    "-vpc"
+                  ]
+                ]
+              },
+              ".",
+              {
+                "Ref": "Domain"
+              },
+              "."
+            ]
+          ]
+        },
+        "Type": "A",
+        "TTL": "300",
+        "ResourceRecords": [
+          {
+            "Fn::GetAtt": [
+              "ChefServer",
+              "PrivateIp"
+            ]
+          }
+        ]
+      }
+    },
+    "WaitCondition": {
+      "Type": "AWS::CloudFormation::WaitCondition",
+      "DependsOn": "ChefServer",
+      "Properties": {
+        "Handle": {
+          "Ref": "WaitHandle"
+        },
+        "Timeout": {
+          "Ref": "MaxProvisionTime"
+        }
+      }
+    },
+    "WaitHandle": {
+      "Type": "AWS::CloudFormation::WaitConditionHandle"
+    }
+  },
+  "Outputs": {
+    "ChefServerWaitResult": {
+      "Value": {
+        "Fn::GetAtt": [
+          "WaitCondition",
+          "Data"
+        ]
+      },
+      "Description": "Reported Wait Data"
+    }
+  }
+}
